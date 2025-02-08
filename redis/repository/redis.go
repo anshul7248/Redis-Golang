@@ -22,6 +22,29 @@ type RedisRepository struct {
 	RedisConn *rediss.Client
 }
 
+func DeleteKey(ctx context.Context, redisConn *rediss.Client, key string, value interface{}) (*models.APIResponse, error) {
+
+	exists, err := redisConn.Exists(ctx, key).Result()
+	if err != nil {
+		fmt.Println("Redis key not found", err)
+	}
+	if exists == 1 {
+		numDelete, err := redisConn.Del(ctx, key).Result()
+		if err != nil {
+			fmt.Println("Some error in deleting the key", err)
+		}
+
+		if numDelete > 0 {
+			fmt.Println("Delete key from redis--->>>", key)
+		} else {
+			fmt.Println("Key not found in redis cache")
+		}
+
+		fmt.Println("Deleted key from redis cache--->>", key)
+	}
+	return nil, err
+}
+
 func CacheData(ctx context.Context, redisConn *rediss.Client, key string, value interface{}) (*models.APIResponse, error) {
 	if value == nil {
 		cacheData, err := redisConn.Get(ctx, key).Result()
@@ -38,14 +61,13 @@ func CacheData(ctx context.Context, redisConn *rediss.Client, key string, value 
 			fmt.Println("Error parsing cached JSON:", err)
 			return nil, err
 		}
-		log.Println("Returning cachd response for key:  ", key)
+		log.Println("Returning cached response for key:  ", key)
 		return &cachedResponse, nil
 	}
 	jsonValue, err := json.Marshal(value)
 	if err != nil {
 		return nil, err
 	}
-
 	err = redisConn.Set(ctx, key, string(jsonValue), 1*time.Minute).Err()
 	if err != nil {
 		return nil, err
@@ -66,6 +88,7 @@ func (r *RedisRepository) GetData(ctx context.Context) (*models.APIResponse, err
 
 	redisKey := "all_data"
 
+	DeleteKey(ctx, r.RedisConn, redisKey, nil)
 	cachedResponse, err := CacheData(ctx, r.RedisConn, redisKey, nil)
 	if err != nil {
 		fmt.Println("Error in getting cached data--->>>>", err)
